@@ -10,6 +10,9 @@ Run with:
 import logging
 
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from utils.data_pipeline import (
     load_csv,
@@ -18,6 +21,7 @@ from utils.data_pipeline import (
     load_master_sleep,
     load_master_activities,
 )
+from utils.garmin_api import get_garmin_client, fetch_recent_sleep, fetch_recent_activities
 from utils.insights_engine import generate_all_insights
 from components.charts import (
     sleep_score_trend,
@@ -40,11 +44,53 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Sidebar — CSV upload
+# Sidebar — Auto-Sync
 # ---------------------------------------------------------------------------
-st.sidebar.title("Upload Garmin Data")
+st.sidebar.title("Garmin Health Dashboard")
+
+st.sidebar.subheader("🔄 Auto-Sync")
+st.sidebar.markdown("Fetch the latest 14 days directly from Garmin Connect.")
+
+if st.sidebar.button("🔄 Sync Last 14 Days"):
+    with st.spinner("Connecting to Garmin Connect..."):
+        try:
+            client = get_garmin_client()
+
+            with st.spinner("Fetching sleep data..."):
+                sleep_data = fetch_recent_sleep(client, days=14)
+            if not sleep_data.empty:
+                merge_sleep(sleep_data)
+                st.sidebar.success(f"Sleep synced: {len(sleep_data)} days updated.")
+                logger.info("Auto-sync: merged %d sleep rows.", len(sleep_data))
+            else:
+                st.sidebar.info("No new sleep data found.")
+
+            with st.spinner("Fetching activity data..."):
+                activity_data = fetch_recent_activities(client, days=14)
+            if not activity_data.empty:
+                merge_activities(activity_data)
+                st.sidebar.success(f"Activities synced: {len(activity_data)} records updated.")
+                logger.info("Auto-sync: merged %d activity rows.", len(activity_data))
+            else:
+                st.sidebar.info("No new activity data found.")
+
+            st.rerun()
+
+        except ValueError as exc:
+            st.sidebar.error(f"Credentials not configured: {exc}")
+            logger.error("Auto-sync credential error: %s", exc)
+        except Exception as exc:
+            st.sidebar.error(f"Sync failed: {exc}")
+            logger.error("Auto-sync error: %s", exc)
+
+st.sidebar.markdown("---")
+
+# ---------------------------------------------------------------------------
+# Sidebar — Manual CSV upload (fallback)
+# ---------------------------------------------------------------------------
+st.sidebar.subheader("📂 Manual CSV Upload")
 st.sidebar.markdown(
-    "Export CSVs from [Garmin Connect](https://connect.garmin.com) and upload below. "
+    "Or upload Garmin CSV exports manually. "
     "Duplicate dates are automatically resolved (newest upload wins)."
 )
 
