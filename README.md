@@ -22,6 +22,8 @@ A local, privacy-first dashboard for visualising and analysing Garmin fitness da
 | UI / Dashboard | [Streamlit](https://streamlit.io) |
 | Data processing | [Pandas](https://pandas.pydata.org) |
 | Charts | [Plotly](https://plotly.com/python/) |
+| Garmin API | [garminconnect](https://pypi.org/project/garminconnect/) |
+| Env / Secrets | [python-dotenv](https://pypi.org/project/python-dotenv/) |
 | Tests | [pytest](https://pytest.org) |
 | Language | Python 3.9+ |
 
@@ -34,17 +36,20 @@ fitness-tracker/
 ├── app.py                    # Streamlit entry point
 ├── utils/
 │   ├── data_pipeline.py      # CSV ingestion, column normalisation, Smart Merge
-│   └── insights_engine.py    # Hard-coded heuristic insight functions
+│   ├── insights_engine.py    # Hard-coded heuristic insight functions
+│   └── garmin_api.py         # Garmin Connect auth, fetch, and JSON→DataFrame translation
 ├── components/
 │   └── charts.py             # Plotly chart builders
 ├── tests/
 │   ├── test_data_pipeline.py
 │   ├── test_insights_engine.py
-│   └── test_charts.py
+│   ├── test_charts.py
+│   └── test_garmin_api.py
 ├── data/                     # Git-ignored — holds master_sleep.csv, master_activities.csv
+├── session/                  # Git-ignored — holds Garmin session tokens
 ├── docs/                     # Architecture spec and milestone progress
 ├── requirements.txt
-└── .env.example              # Placeholder for future API keys
+└── .env.example              # Copy to .env and fill in Garmin credentials
 ```
 
 ---
@@ -86,18 +91,23 @@ The app opens at `http://localhost:8501` in your browser.
 
 ## Usage
 
-### Exporting data from Garmin Connect
+### Option A — Auto-Sync (V2.0)
+
+1. Copy `.env.example` to `.env` and fill in your Garmin Connect credentials:
+   ```
+   GARMIN_EMAIL=your_email@example.com
+   GARMIN_PASSWORD=your_secure_password
+   ```
+2. Open the dashboard sidebar and click **🔄 Sync Last 14 Days**
+3. The app authenticates, fetches the latest sleep and activity data, merges it, and refreshes automatically
+4. On first sync, credentials are used once and two token files are written to `session/` (`oauth1_token.json`, `oauth2_token.json`). Subsequent syncs load these tokens directly and skip the password step entirely
+
+### Option B — Manual CSV Upload (fallback)
 
 1. Go to [Garmin Connect](https://connect.garmin.com)
-2. Navigate to **Health Stats → Sleep** or **Activities**
-3. Click **Export CSV** (top-right of the data table)
-
-### Uploading data
-
-1. Open the sidebar in the dashboard
-2. Use the **Sleep CSV** uploader to upload one or more sleep export files
-3. Use the **Activities CSV** uploader to upload one or more activity export files
-4. The dashboard refreshes automatically — duplicate dates are resolved on every upload
+2. Navigate to **Health Stats → Sleep** or **Activities** and click **Export CSV**
+3. Use the sidebar uploaders to upload one or more CSV files
+4. Duplicate dates are resolved automatically (newest upload wins)
 
 > **Note:** Garmin's Sleep CSV uses non-standard column names (`Sleep Score 4 Weeks` for the date, `Score` for the sleep score). The pipeline normalises these automatically.
 
@@ -113,7 +123,7 @@ pytest tests/ -v
 pytest tests/test_data_pipeline.py -v
 ```
 
-Total: **68 tests** across data pipeline, insights engine, and chart components.
+Total: **100 tests** across data pipeline, insights engine, chart components, and Garmin API integration.
 
 ---
 
